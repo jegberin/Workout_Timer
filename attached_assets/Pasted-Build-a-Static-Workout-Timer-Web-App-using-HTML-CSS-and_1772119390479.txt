@@ -1,0 +1,25 @@
+Build a Static Workout Timer Web App using HTML, CSS, and Vanilla JavaScript.
+​1. UI and Layout:
+​Create a clean, modern, and mobile-friendly interface with a dark mode workout aesthetic.
+​Display two large, highly visible timers:
+​Main Timer: The current 3-minute interval countdown (format: MM:SS).
+​Total Session Timer: The overall 45-minute countdown (format: MM:SS).
+​Below the timers, include three large, easily tappable buttons: "Start", "Pause", and "Stop".
+​2. Core Logic:
+​Interval Timer: Starts at 3:00 (180 seconds) and counts down to 0.
+​Looping: When the interval timer hits 0, it should immediately reset to 3:00 and continue counting down without requiring user input.
+​Total Timer: Starts at 45:00 (2700 seconds) and counts down continuously whenever the interval timer is running.
+​End of Workout: When the Total Timer reaches 0:00, stop the interval timer completely and display a "Workout Complete!" message.
+​Button Functions:
+​Start: Begins or resumes both countdowns.
+​Pause: Freezes both countdowns at their current times.
+​Stop: Resets the interval timer to 3:00 and the total timer to 45:00, pausing all action.
+​3. Audio and Voice Prompts (Crucial):
+​Use the native window.speechSynthesis API for all voice announcements so no external audio files are needed.
+​At exactly 2:00 remaining on the interval timer, use speech synthesis to say: "Two minutes to go."
+​At exactly 1:00 remaining on the interval timer, use speech synthesis to say: "One minute to go."
+​At 0:05, 0:04, 0:03, 0:02, and 0:01 remaining, use speech synthesis to count down: "Five", "Four", "Three", "Two", "One".
+​The Buzzer: When the interval timer hits 0:00, use the native Web Audio API (AudioContext) to generate a loud, 1-second buzzer/beep sound. Do NOT use external MP3 or WAV files for the buzzer.
+​4. Edge Cases:
+​Ensure the timers do not drift or speed up if the user clicks "Start" multiple times.
+​Add a small note on the UI reminding the user to click "Start" to enable audio permissions, as browsers require a user interaction before playing audio.
