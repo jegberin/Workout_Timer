@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Button } from "@/components/ui/button";
 import { Play, Pause, Square, Dumbbell, Volume2 } from "lucide-react";
+import { IntervalCelebration, FinalCelebration } from "@/components/celebrations";
 
-const INTERVAL_DURATION = 180; // 3 minutes in seconds
-const SESSION_DURATION = 2700; // 45 minutes in seconds
+const INTERVAL_DURATION = 180;
+const SESSION_DURATION = 2700;
 
 type TimerState = "idle" | "running" | "paused";
 
@@ -19,6 +19,9 @@ export default function WorkoutTimer() {
   const [sessionTime, setSessionTime] = useState(SESSION_DURATION);
   const [workoutComplete, setWorkoutComplete] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
+  const [showIntervalCelebration, setShowIntervalCelebration] = useState(false);
+  const [celebrationRound, setCelebrationRound] = useState(0);
+  const [showFinalCelebration, setShowFinalCelebration] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -28,16 +31,9 @@ export default function WorkoutTimer() {
   const timerStateRef = useRef<TimerState>("idle");
   const currentRoundRef = useRef(1);
 
-  // Keep refs in sync
-  useEffect(() => {
-    intervalTimeRef.current = intervalTime;
-  }, [intervalTime]);
-  useEffect(() => {
-    sessionTimeRef.current = sessionTime;
-  }, [sessionTime]);
-  useEffect(() => {
-    timerStateRef.current = timerState;
-  }, [timerState]);
+  useEffect(() => { intervalTimeRef.current = intervalTime; }, [intervalTime]);
+  useEffect(() => { sessionTimeRef.current = sessionTime; }, [sessionTime]);
+  useEffect(() => { timerStateRef.current = timerState; }, [timerState]);
 
   const speak = useCallback((text: string) => {
     if (!window.speechSynthesis) return;
@@ -49,29 +45,75 @@ export default function WorkoutTimer() {
     window.speechSynthesis.speak(utterance);
   }, []);
 
-  const playBuzzer = useCallback(() => {
+  const playFogHorn = useCallback(() => {
     try {
       if (!audioCtxRef.current) {
         audioCtxRef.current = new AudioContext();
       }
       const ctx = audioCtxRef.current;
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
+      const now = ctx.currentTime;
 
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const osc3 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      const gain2 = ctx.createGain();
+      const gain3 = ctx.createGain();
+      const masterGain = ctx.createGain();
 
-      oscillator.type = "sawtooth";
-      oscillator.frequency.setValueAtTime(180, ctx.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.8);
+      osc1.connect(gain1);
+      osc2.connect(gain2);
+      osc3.connect(gain3);
+      gain1.connect(masterGain);
+      gain2.connect(masterGain);
+      gain3.connect(masterGain);
+      masterGain.connect(ctx.destination);
 
-      gainNode.gain.setValueAtTime(0.8, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+      osc1.type = "sawtooth";
+      osc1.frequency.setValueAtTime(85, now);
+      osc1.frequency.linearRampToValueAtTime(80, now + 0.3);
+      osc1.frequency.linearRampToValueAtTime(82, now + 1.2);
+      osc1.frequency.linearRampToValueAtTime(75, now + 1.8);
 
-      oscillator.start(ctx.currentTime);
-      oscillator.stop(ctx.currentTime + 1.0);
+      osc2.type = "sawtooth";
+      osc2.frequency.setValueAtTime(86.5, now);
+      osc2.frequency.linearRampToValueAtTime(81, now + 0.3);
+      osc2.frequency.linearRampToValueAtTime(83.5, now + 1.2);
+      osc2.frequency.linearRampToValueAtTime(76, now + 1.8);
+
+      osc3.type = "sine";
+      osc3.frequency.setValueAtTime(170, now);
+      osc3.frequency.linearRampToValueAtTime(160, now + 0.3);
+      osc3.frequency.linearRampToValueAtTime(164, now + 1.2);
+      osc3.frequency.linearRampToValueAtTime(150, now + 1.8);
+
+      gain1.gain.setValueAtTime(0.001, now);
+      gain1.gain.linearRampToValueAtTime(0.5, now + 0.15);
+      gain1.gain.linearRampToValueAtTime(0.45, now + 0.8);
+      gain1.gain.linearRampToValueAtTime(0.3, now + 1.4);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+
+      gain2.gain.setValueAtTime(0.001, now);
+      gain2.gain.linearRampToValueAtTime(0.35, now + 0.15);
+      gain2.gain.linearRampToValueAtTime(0.3, now + 0.8);
+      gain2.gain.linearRampToValueAtTime(0.2, now + 1.4);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+
+      gain3.gain.setValueAtTime(0.001, now);
+      gain3.gain.linearRampToValueAtTime(0.15, now + 0.2);
+      gain3.gain.linearRampToValueAtTime(0.1, now + 1.0);
+      gain3.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+
+      masterGain.gain.setValueAtTime(0.8, now);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc3.start(now);
+      osc1.stop(now + 2.0);
+      osc2.stop(now + 2.0);
+      osc3.stop(now + 1.8);
     } catch (e) {
-      // AudioContext not available
+      // Not available
     }
   }, []);
 
@@ -93,12 +135,13 @@ export default function WorkoutTimer() {
     const iTime = intervalTimeRef.current;
 
     if (sTime <= 0) {
-      // Session complete
       if (intervalRef.current) clearInterval(intervalRef.current);
       setTimerState("idle");
       setWorkoutComplete(true);
+      setShowFinalCelebration(true);
       setSessionTime(0);
       setIntervalTime(0);
+      playFogHorn();
       return;
     }
 
@@ -109,19 +152,19 @@ export default function WorkoutTimer() {
     sessionTimeRef.current = newSessionTime;
 
     if (newIntervalTime <= 0) {
-      // Interval complete — buzz and reset
-      playBuzzer();
+      playFogHorn();
       setIntervalTime(INTERVAL_DURATION);
       intervalTimeRef.current = INTERVAL_DURATION;
       announcedRef.current = new Set();
       const newRound = currentRoundRef.current + 1;
       currentRoundRef.current = newRound;
       setCurrentRound(newRound);
+      setCelebrationRound(currentRoundRef.current - 1);
+      setShowIntervalCelebration(true);
     } else {
       setIntervalTime(newIntervalTime);
       intervalTimeRef.current = newIntervalTime;
 
-      // Voice announcements
       if (newIntervalTime === 120 && !announcedRef.current.has(120)) {
         announcedRef.current.add(120);
         speak("Two minutes to go.");
@@ -145,7 +188,7 @@ export default function WorkoutTimer() {
         speak("One");
       }
     }
-  }, [playBuzzer, speak]);
+  }, [playFogHorn, speak]);
 
   const startTimer = useCallback(() => {
     initAudio();
@@ -175,6 +218,8 @@ export default function WorkoutTimer() {
     setCurrentRound(1);
     currentRoundRef.current = 1;
     setWorkoutComplete(false);
+    setShowIntervalCelebration(false);
+    setShowFinalCelebration(false);
     window.speechSynthesis?.cancel();
   }, []);
 
@@ -191,7 +236,6 @@ export default function WorkoutTimer() {
   const isPaused = timerState === "paused";
   const isIdle = timerState === "idle";
 
-  // Warning colors when low time
   const intervalWarning = intervalTime <= 10 && intervalTime > 0;
   const intervalCritical = intervalTime <= 5 && intervalTime > 0;
 
@@ -200,7 +244,6 @@ export default function WorkoutTimer() {
       className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white relative overflow-hidden"
       data-testid="workout-timer-page"
     >
-      {/* Background grid */}
       <div
         className="absolute inset-0 opacity-[0.04]"
         style={{
@@ -210,13 +253,24 @@ export default function WorkoutTimer() {
         }}
       />
 
-      {/* Glow effects */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-10 blur-[120px]"
         style={{ background: isRunning ? "radial-gradient(circle, #3b82f6, transparent)" : "radial-gradient(circle, #374151, transparent)" }}
       />
 
+      {showIntervalCelebration && (
+        <IntervalCelebration
+          round={celebrationRound}
+          onComplete={() => setShowIntervalCelebration(false)}
+        />
+      )}
+
+      {showFinalCelebration && (
+        <FinalCelebration
+          onComplete={() => setShowFinalCelebration(false)}
+        />
+      )}
+
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 w-full max-w-lg">
-        {/* Header */}
         <div className="flex flex-col items-center gap-2" data-testid="header-section">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
@@ -228,13 +282,12 @@ export default function WorkoutTimer() {
           </div>
           <div className="flex items-center gap-2 text-zinc-500 text-sm">
             <span data-testid="text-round-number">Round {currentRound}</span>
-            <span>•</span>
+            <span>&#8226;</span>
             <span>3 min intervals / 45 min session</span>
           </div>
         </div>
 
-        {/* Workout Complete Banner */}
-        {workoutComplete && (
+        {workoutComplete && !showFinalCelebration && (
           <div
             className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-4 text-center"
             data-testid="status-workout-complete"
@@ -244,10 +297,8 @@ export default function WorkoutTimer() {
           </div>
         )}
 
-        {/* Main Interval Timer */}
         <div className="w-full" data-testid="section-interval-timer">
           <div className="relative rounded-2xl border border-zinc-800 bg-zinc-900/80 backdrop-blur-sm p-8 flex flex-col items-center gap-4">
-            {/* Progress bar top */}
             <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl overflow-hidden bg-zinc-800">
               <div
                 className="h-full transition-all duration-1000 ease-linear rounded-full"
@@ -291,7 +342,6 @@ export default function WorkoutTimer() {
           </div>
         </div>
 
-        {/* Session Timer */}
         <div className="w-full" data-testid="section-session-timer">
           <div className="relative rounded-2xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-sm p-6 flex flex-col items-center gap-3">
             <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-2xl overflow-hidden bg-zinc-800">
@@ -323,9 +373,7 @@ export default function WorkoutTimer() {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex items-center gap-4 w-full" data-testid="controls-section">
-          {/* Start Button */}
           <button
             onClick={startTimer}
             disabled={isRunning || workoutComplete}
@@ -356,7 +404,6 @@ export default function WorkoutTimer() {
             <span>{isPaused ? "Resume" : "Start"}</span>
           </button>
 
-          {/* Pause Button */}
           <button
             onClick={pauseTimer}
             disabled={!isRunning}
@@ -383,7 +430,6 @@ export default function WorkoutTimer() {
             <span>Pause</span>
           </button>
 
-          {/* Stop Button */}
           <button
             onClick={stopTimer}
             disabled={isIdle && !workoutComplete}
@@ -411,7 +457,6 @@ export default function WorkoutTimer() {
           </button>
         </div>
 
-        {/* Audio note */}
         <div
           className="flex items-start gap-2.5 w-full rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
           data-testid="text-audio-notice"
@@ -422,7 +467,6 @@ export default function WorkoutTimer() {
           </p>
         </div>
 
-        {/* Status indicator */}
         <div className="flex items-center gap-2" data-testid="status-timer-state">
           <div
             className="w-2 h-2 rounded-full transition-colors duration-300"
