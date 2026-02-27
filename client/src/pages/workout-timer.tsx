@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Play, Pause, Square, Dumbbell, Volume2 } from "lucide-react";
+import { Play, Pause, Square, Dumbbell } from "lucide-react";
 import { IntervalCelebration, FinalCelebration } from "@/components/celebrations";
 
 const INTERVAL_DURATION = 180;
@@ -457,14 +457,18 @@ export default function WorkoutTimer() {
           </button>
         </div>
 
-        <div
-          className="flex items-start gap-2.5 w-full rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
-          data-testid="text-audio-notice"
-        >
-          <Volume2 className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            Click <span className="text-zinc-400 font-medium">Start</span> to enable audio. Browsers require a user interaction before playing audio or voice announcements.
-          </p>
+        <div className="w-full rounded-xl overflow-hidden" data-testid="spotify-player">
+          <iframe
+            style={{ borderRadius: "12px" }}
+            src="https://open.spotify.com/embed/playlist/7mZZkjpyoY83wHbssEtzNF?utm_source=generator&theme=0"
+            width="100%"
+            height="152"
+            frameBorder="0"
+            allowFullScreen
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            title="Workout Playlist"
+          />
         </div>
 
         <div className="flex items-center gap-2" data-testid="status-timer-state">
