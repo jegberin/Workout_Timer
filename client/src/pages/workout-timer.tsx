@@ -2,10 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, Square, Dumbbell } from "lucide-react";
 import { IntervalCelebration, FinalCelebration } from "@/components/celebrations";
 
-const INTERVAL_DURATION = 180;
+const WORK_DURATION = 150;
+const BREAK_DURATION = 30;
+const INTERVAL_DURATION = WORK_DURATION + BREAK_DURATION;
 const SESSION_DURATION = 2700;
 
 type TimerState = "idle" | "running" | "paused";
+type Phase = "work" | "break";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -15,25 +18,28 @@ function formatTime(seconds: number): string {
 
 export default function WorkoutTimer() {
   const [timerState, setTimerState] = useState<TimerState>("idle");
-  const [intervalTime, setIntervalTime] = useState(INTERVAL_DURATION);
+  const [intervalTime, setIntervalTime] = useState(WORK_DURATION);
   const [sessionTime, setSessionTime] = useState(SESSION_DURATION);
   const [workoutComplete, setWorkoutComplete] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
+  const [phase, setPhase] = useState<Phase>("work");
   const [showIntervalCelebration, setShowIntervalCelebration] = useState(false);
   const [celebrationRound, setCelebrationRound] = useState(0);
   const [showFinalCelebration, setShowFinalCelebration] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const announcedRef = useRef<Set<number>>(new Set());
-  const intervalTimeRef = useRef(INTERVAL_DURATION);
+  const announcedRef = useRef<Set<string>>(new Set());
+  const intervalTimeRef = useRef(WORK_DURATION);
   const sessionTimeRef = useRef(SESSION_DURATION);
   const timerStateRef = useRef<TimerState>("idle");
   const currentRoundRef = useRef(1);
+  const phaseRef = useRef<Phase>("work");
 
   useEffect(() => { intervalTimeRef.current = intervalTime; }, [intervalTime]);
   useEffect(() => { sessionTimeRef.current = sessionTime; }, [sessionTime]);
   useEffect(() => { timerStateRef.current = timerState; }, [timerState]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   const speak = useCallback((text: string) => {
     if (!window.speechSynthesis) return;
@@ -117,6 +123,28 @@ export default function WorkoutTimer() {
     }
   }, []);
 
+  const playShortBeep = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } catch (e) {
+      // Not available
+    }
+  }, []);
+
   const initAudio = useCallback(() => {
     try {
       if (!audioCtxRef.current) {
@@ -133,6 +161,7 @@ export default function WorkoutTimer() {
   const tick = useCallback(() => {
     const sTime = sessionTimeRef.current;
     const iTime = intervalTimeRef.current;
+    const currentPhase = phaseRef.current;
 
     if (sTime <= 0) {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -151,44 +180,80 @@ export default function WorkoutTimer() {
     setSessionTime(newSessionTime);
     sessionTimeRef.current = newSessionTime;
 
-    if (newIntervalTime <= 0) {
-      playFogHorn();
-      setIntervalTime(INTERVAL_DURATION);
-      intervalTimeRef.current = INTERVAL_DURATION;
-      announcedRef.current = new Set();
-      const newRound = currentRoundRef.current + 1;
-      currentRoundRef.current = newRound;
-      setCurrentRound(newRound);
-      setCelebrationRound(currentRoundRef.current - 1);
-      setShowIntervalCelebration(true);
-    } else {
-      setIntervalTime(newIntervalTime);
-      intervalTimeRef.current = newIntervalTime;
+    if (currentPhase === "work") {
+      if (newIntervalTime <= 0) {
+        playShortBeep();
+        speak("Break time. Thirty seconds.");
+        setPhase("break");
+        phaseRef.current = "break";
+        setIntervalTime(BREAK_DURATION);
+        intervalTimeRef.current = BREAK_DURATION;
+        announcedRef.current = new Set();
+      } else {
+        setIntervalTime(newIntervalTime);
+        intervalTimeRef.current = newIntervalTime;
 
-      if (newIntervalTime === 120 && !announcedRef.current.has(120)) {
-        announcedRef.current.add(120);
-        speak("Two minutes to go.");
-      } else if (newIntervalTime === 60 && !announcedRef.current.has(60)) {
-        announcedRef.current.add(60);
-        speak("One minute to go.");
-      } else if (newIntervalTime === 5 && !announcedRef.current.has(5)) {
-        announcedRef.current.add(5);
-        speak("Five");
-      } else if (newIntervalTime === 4 && !announcedRef.current.has(4)) {
-        announcedRef.current.add(4);
-        speak("Four");
-      } else if (newIntervalTime === 3 && !announcedRef.current.has(3)) {
-        announcedRef.current.add(3);
-        speak("Three");
-      } else if (newIntervalTime === 2 && !announcedRef.current.has(2)) {
-        announcedRef.current.add(2);
-        speak("Two");
-      } else if (newIntervalTime === 1 && !announcedRef.current.has(1)) {
-        announcedRef.current.add(1);
-        speak("One");
+        const key = `work-${newIntervalTime}`;
+        if (newIntervalTime === 90 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Ninety seconds to go.");
+        } else if (newIntervalTime === 60 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("One minute to go.");
+        } else if (newIntervalTime === 5 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Five");
+        } else if (newIntervalTime === 4 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Four");
+        } else if (newIntervalTime === 3 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Three");
+        } else if (newIntervalTime === 2 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Two");
+        } else if (newIntervalTime === 1 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("One");
+        }
+      }
+    } else {
+      if (newIntervalTime <= 0) {
+        playFogHorn();
+        setPhase("work");
+        phaseRef.current = "work";
+        setIntervalTime(WORK_DURATION);
+        intervalTimeRef.current = WORK_DURATION;
+        announcedRef.current = new Set();
+        const newRound = currentRoundRef.current + 1;
+        currentRoundRef.current = newRound;
+        setCurrentRound(newRound);
+        setCelebrationRound(currentRoundRef.current - 1);
+        setShowIntervalCelebration(true);
+      } else {
+        setIntervalTime(newIntervalTime);
+        intervalTimeRef.current = newIntervalTime;
+
+        const key = `break-${newIntervalTime}`;
+        if (newIntervalTime === 5 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Five");
+        } else if (newIntervalTime === 4 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Four");
+        } else if (newIntervalTime === 3 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Three");
+        } else if (newIntervalTime === 2 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("Two");
+        } else if (newIntervalTime === 1 && !announcedRef.current.has(key)) {
+          announcedRef.current.add(key);
+          speak("One");
+        }
       }
     }
-  }, [playFogHorn, speak]);
+  }, [playFogHorn, playShortBeep, speak]);
 
   const startTimer = useCallback(() => {
     initAudio();
@@ -210,13 +275,15 @@ export default function WorkoutTimer() {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setTimerState("idle");
     timerStateRef.current = "idle";
-    setIntervalTime(INTERVAL_DURATION);
+    setIntervalTime(WORK_DURATION);
     setSessionTime(SESSION_DURATION);
-    intervalTimeRef.current = INTERVAL_DURATION;
+    intervalTimeRef.current = WORK_DURATION;
     sessionTimeRef.current = SESSION_DURATION;
     announcedRef.current = new Set();
     setCurrentRound(1);
     currentRoundRef.current = 1;
+    setPhase("work");
+    phaseRef.current = "work";
     setWorkoutComplete(false);
     setShowIntervalCelebration(false);
     setShowFinalCelebration(false);
@@ -229,7 +296,9 @@ export default function WorkoutTimer() {
     };
   }, []);
 
-  const intervalProgress = ((INTERVAL_DURATION - intervalTime) / INTERVAL_DURATION) * 100;
+  const isBreak = phase === "break";
+  const currentPhaseDuration = isBreak ? BREAK_DURATION : WORK_DURATION;
+  const intervalProgress = ((currentPhaseDuration - intervalTime) / currentPhaseDuration) * 100;
   const sessionProgress = ((SESSION_DURATION - sessionTime) / SESSION_DURATION) * 100;
 
   const isRunning = timerState === "running";
@@ -238,6 +307,11 @@ export default function WorkoutTimer() {
 
   const intervalWarning = intervalTime <= 10 && intervalTime > 0;
   const intervalCritical = intervalTime <= 5 && intervalTime > 0;
+
+  const phaseColor = isBreak ? "#10b981" : "#3b82f6";
+  const phaseGradient = isBreak
+    ? "linear-gradient(to right, #10b981, #34d399)"
+    : "linear-gradient(to right, #3b82f6, #60a5fa)";
 
   return (
     <div
@@ -254,7 +328,7 @@ export default function WorkoutTimer() {
       />
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-10 blur-[120px]"
-        style={{ background: isRunning ? "radial-gradient(circle, #3b82f6, transparent)" : "radial-gradient(circle, #374151, transparent)" }}
+        style={{ background: isRunning ? `radial-gradient(circle, ${phaseColor}, transparent)` : "radial-gradient(circle, #374151, transparent)" }}
       />
 
       {showIntervalCelebration && (
@@ -283,7 +357,7 @@ export default function WorkoutTimer() {
           <div className="flex items-center gap-2 text-zinc-500 text-sm">
             <span data-testid="text-round-number">Round {currentRound}</span>
             <span>&#8226;</span>
-            <span>3 min intervals / 45 min session</span>
+            <span>2:30 work + 0:30 rest / 45 min session</span>
           </div>
         </div>
 
@@ -308,14 +382,29 @@ export default function WorkoutTimer() {
                     ? "#ef4444"
                     : intervalWarning
                     ? "#f59e0b"
-                    : "linear-gradient(to right, #3b82f6, #60a5fa)",
+                    : phaseGradient,
                 }}
               />
             </div>
 
-            <p className="text-xs font-semibold tracking-[0.25em] uppercase text-zinc-500">
-              Interval
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-semibold tracking-[0.25em] uppercase text-zinc-500">
+                {isBreak ? "Break" : "Interval"}
+              </p>
+              {isRunning && (
+                <span
+                  className="text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-full"
+                  style={{
+                    background: isBreak ? "rgba(16,185,129,0.15)" : "rgba(59,130,246,0.15)",
+                    color: isBreak ? "#34d399" : "#60a5fa",
+                    border: `1px solid ${isBreak ? "rgba(16,185,129,0.3)" : "rgba(59,130,246,0.3)"}`,
+                  }}
+                  data-testid="badge-phase"
+                >
+                  {isBreak ? "Rest" : "Work"}
+                </span>
+              )}
+            </div>
 
             <div
               className="font-mono font-bold tabular-nums transition-colors duration-300"
@@ -327,11 +416,13 @@ export default function WorkoutTimer() {
                   : intervalWarning
                   ? "#f59e0b"
                   : isRunning
-                  ? "#f1f5f9"
+                  ? isBreak ? "#6ee7b7" : "#f1f5f9"
                   : "#94a3b8",
                 textShadow: isRunning
                   ? intervalCritical
                     ? "0 0 40px rgba(239,68,68,0.4)"
+                    : isBreak
+                    ? "0 0 40px rgba(16,185,129,0.3)"
                     : "0 0 40px rgba(59,130,246,0.3)"
                   : "none",
               }}
@@ -475,12 +566,12 @@ export default function WorkoutTimer() {
           <div
             className="w-2 h-2 rounded-full transition-colors duration-300"
             style={{
-              background: isRunning ? "#22c55e" : isPaused ? "#f59e0b" : "#52525b",
-              boxShadow: isRunning ? "0 0 8px #22c55e" : "none",
+              background: isRunning ? (isBreak ? "#10b981" : "#22c55e") : isPaused ? "#f59e0b" : "#52525b",
+              boxShadow: isRunning ? `0 0 8px ${isBreak ? "#10b981" : "#22c55e"}` : "none",
             }}
           />
           <span className="text-xs text-zinc-500 font-medium tracking-wider uppercase">
-            {isRunning ? "Running" : isPaused ? "Paused" : workoutComplete ? "Complete" : "Ready"}
+            {isRunning ? (isBreak ? "Break" : "Running") : isPaused ? "Paused" : workoutComplete ? "Complete" : "Ready"}
           </span>
         </div>
       </div>
